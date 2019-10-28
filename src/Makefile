@@ -22,4 +22,4 @@ clean :
 
 
 run : clean all
-		./$(BIN) "data_test.txt" 10 5 1 5
+		./$(BIN) "data_test.txt" 10 4 1 5
