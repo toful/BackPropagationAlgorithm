@@ -11,7 +11,7 @@ SRC = backPropagation.c
 
 BIN = backPropagation.obj
 
-CFLAGS = 
+CFLAGS = -lm
 
 ######################################################################
 all :
@@ -22,4 +22,12 @@ clean :
 
 
 run : clean all
-		./$(BIN) "data_test.txt" 10 4 1 5
+		./$(BIN) "data.txt" 10000 89 0.05 0.25 2 5 1
+
+test : clean all
+		./$(BIN) "data_test.txt" 1000 80 0.05 0.25 2 5 1
+
+#./backPropagation.obj "data.txt" 650 89 0.004 0.005 2 5 1
+#./backPropagation.obj "data.txt" 270 89 0.02 0.01 2 5 1
+#./backPropagation.obj "data_test.txt" 25000 89 0.002 0.001 2 5
+#./backPropagation.obj "data_test.txt" 1000 89 0.02 0.005 2 5 1
