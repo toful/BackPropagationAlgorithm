@@ -1,4 +1,8 @@
 # BackPropagationAlgorithm
+
+[![License](https://img.shields.io/github/license/toful/BackPropagationAlgorithm)](https://github.com/toful/BackPropagationAlgorithm)
+
+
 Implementation of the Back Propagation Algorithm. Neural and Evolutionary Computation subject, MESIIA Master, URV 
 
 

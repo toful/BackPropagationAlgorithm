@@ -29,5 +29,6 @@ test : clean all
 
 #./backPropagation.obj "data.txt" 650 89 0.004 0.005 2 5 1
 #./backPropagation.obj "data.txt" 270 89 0.02 0.01 2 5 1
-#./backPropagation.obj "data_test.txt" 25000 89 0.002 0.001 2 5
+#./backPropagation.obj "data_test.txt" 25000 89 0.002 0.001 2 5 1
 #./backPropagation.obj "data_test.txt" 1000 89 0.02 0.005 2 5 1
+#./backPropagation.obj "data.txt" 20000 89 0.02 0.1 6 4 8 10 10 8 1

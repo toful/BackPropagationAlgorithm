@@ -299,7 +299,7 @@ void error_back_propagation( double * y ){
             for(i=0; i< nn.neurons_for_hidden_layer[l+1]; i++ ){
                 aux += nn.d[l+1][i] * nn.w[l+1][i][j];
             }
-            nn.d[l][j] = compute_derivate_a( nn.h[l][j] )*aux;
+            nn.d[l][j] = compute_derivate_a( nn.h[l+1][j] )*aux; //ERROR found (using h0 which doesn't exists)
         }
     }
 }
