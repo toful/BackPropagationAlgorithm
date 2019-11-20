@@ -33,12 +33,15 @@ typedef struct {
 
     double *** update_w; //update weights matrix
     double ** update_theta; //update theta values
+
+    double *** accum_update_w; //update weights matrix for the batch bp
+    double ** accum_update_theta; //update theta values for the batch bp
 } neuralNetwork_struct;
 
 dataset_struct dataset; //dataset storing structure
 neuralNetwork_struct nn; //neural network structure
 
-char * arguments = "The following input values are needed:\n\tData file\n\tLearining rate(n)\n\tMomentum (alpha)\n\tNumber of hidden layers (including the output layer)\n\t[neurons for each layer]";
+char * arguments = "The following input values are needed:\n\tData file\n\tNumber of epochs\n\t\% of the dataset used as the training set\n\tLearning rate(n)\n\tMomentum (alpha)\n\tNumber of hidden layers (including the output layer)\n\t[neurons for each layer]";
 
 
 void print_dataset(){
@@ -247,6 +250,72 @@ void init_nn(){
     for( l=0; l < nn.hidden_layers; l++ ){
         nn.update_theta[l] = (double *) calloc( nn.neurons_for_hidden_layer[l], sizeof(double) );
     }
+
+    //INITIALIZING THE ACCUM UPDATES OF THE WEIGHTS
+    nn.accum_update_w = (double ***) malloc( sizeof(double **) * nn.hidden_layers ); //num hidden layers +1 because of the output layer
+    //initializing the weigths between the input layer and the first hidden layer
+    nn.accum_update_w[0] = (double **) malloc( sizeof(double *) * nn.neurons_for_hidden_layer[0] );
+    for( i=0; i < nn.neurons_for_hidden_layer[0]; i++ ){
+        nn.accum_update_w[0][i] = (double *) calloc( dataset.num_features, sizeof(double) );
+    }
+    //initializing the weights between hidden layers
+    for( l=1; l < nn.hidden_layers; l++ ){
+        nn.accum_update_w[l] = (double **) malloc( sizeof(double *) * nn.neurons_for_hidden_layer[l] );
+        for( i=0; i < nn.neurons_for_hidden_layer[l]; i++ ){
+            nn.accum_update_w[l][i] = (double *) calloc( nn.neurons_for_hidden_layer[l-1], sizeof(double) );
+        }
+    }
+
+    //INITIALIZING THE ACCUM UPDATE THETA VALUES
+    nn.accum_update_theta = (double **) malloc( sizeof(double *) * nn.hidden_layers );
+    for( l=0; l < nn.hidden_layers; l++ ){
+        nn.accum_update_theta[l] = (double *) calloc( nn.neurons_for_hidden_layer[l], sizeof(double) );
+    }
+}
+
+void reset_nn(){
+    int l, i, j;
+    //INITIALIZING THE WEIGHTS
+    //initializing the weigths between the input layer and the first hidden layer
+    l=0;
+    for( i=0; i < nn.neurons_for_hidden_layer[l]; i++ ){
+        for( j=0; j<dataset.num_features; j++ )
+            nn.w[l][i][j] = (double)rand()/RAND_MAX;
+    }
+    //initializing the weights between hidden layers
+    for( l=1; l < nn.hidden_layers; l++ ){
+        for( i=0; i < nn.neurons_for_hidden_layer[l]; i++ ){
+            for( j=0; j < nn.neurons_for_hidden_layer[ l-1 ]; j++ )
+                nn.w[l][i][j] = (double)rand()/RAND_MAX;
+        }
+    }
+
+    //INITIALIZING THE THETA VALUES
+    for( l=0; l < nn.hidden_layers; l++ ){
+        for( i=0; i<nn.neurons_for_hidden_layer[l]; i++ )
+            nn.theta[l][i] = (double)rand()/RAND_MAX;
+    }
+
+    //INITIALIZING THE UPDATES OF THE WEIGHTS
+    //initializing the weigths between the input layer and the first hidden layer
+    l=0;
+    for( i=0; i < nn.neurons_for_hidden_layer[0]; i++ ){
+        for( j=0; j<dataset.num_features; j++ )
+            nn.update_w[0][i][j] = 0;
+    }
+    //initializing the weights between hidden layers
+    for( l=1; l < nn.hidden_layers; l++ ){
+        for( i=0; i < nn.neurons_for_hidden_layer[l]; i++ ){
+            for( j=0; j < nn.neurons_for_hidden_layer[ l-1 ]; j++ )
+                nn.update_w[l][i][j] = 0;
+        }
+    }
+
+    //INITIALIZING THE UPDATE THETA VALUES
+    for( l=0; l < nn.hidden_layers; l++ ){
+        for( i=0; i<nn.neurons_for_hidden_layer[l]; i++ )
+            nn.update_theta[l][i] = 0;
+    }
 }
 
 double * feed_forward_propagation(){
@@ -281,6 +350,8 @@ double compute_derivate_a( double h){
     g = 1 / ( 1 + exp(-h) );
     return (g*(1-g)); 
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void error_back_propagation( double * y ){
     int i, j, l;
@@ -330,49 +401,13 @@ void update_nn(double n, double alpha){
     }
 }
 
-int main(int argc, char *argv[])
-{
-    srand ( time ( NULL));
-    if( argc < 4){
-        printf("Too few arguments.\n");
-        printf("%s\n", arguments);
-        exit(1);
-    }
+void online_BP_algorithm( int epochs, int trainset_size, double n, double alpha, double s_min, double s_max){
     int i, j, m, epoch;
-    double s_min = 0.1;
-    double s_max = 0.9;
-    int epochs = atoi(argv[2]); //number of epochs
-    float trainset_size_perc = atof(argv[3]); //% of the dataset used as the training set 
-    double n = atof(argv[4]); //learning rate: between 0.2 and 0.01
-    double alpha = atof(argv[5]); //momentum: between 0.0 and 0.9
-
-    //genrating the dataset
-    init_dataset( argv[1] );
-    print_dataset();
-
-    //preprocessing de data
-    scale_dataset( s_min, s_max );
-    print_dataset();
-    
-    //initializing the neural network
-    nn.hidden_layers = atoi(argv[6]);
-    if( argc < 6 + nn.hidden_layers ){
-        printf("Too few arguments.\n");
-        printf("%s\n", arguments);
-        exit(1);
-    }
-    nn.neurons_for_hidden_layer = (int *) malloc( sizeof(int) * nn.hidden_layers );
-    for( i = 0; i < nn.hidden_layers; i++ )
-        nn.neurons_for_hidden_layer[i] = atoi( argv[6+i] );
-    init_nn();
-
-    //TRAINING PHASE
-    int trainset_size = FLOAT_TO_INT( dataset.num_samples * trainset_size_perc / 100 );
     double * y_pred;
     double err, aux1, aux2;
-    err =0; aux1=0; aux2=0;
     //For epoch = 1 To num epochs
     for( epoch = 0; epoch < epochs; epoch++ ){
+        err =0; aux1=0; aux2=0;
         //For pat = 1 To num training patterns
         for( i = 0; i < trainset_size; i++ ){
             //Choose a random pattern of the training set
@@ -401,16 +436,240 @@ int main(int argc, char *argv[])
         //Feed−forward all validation patterns and calculate their prediction quadratic error
         //WE DON'T USE A VALIDATION SET IN THIS PRACTICE
     }
+}
 
-    //TESTING PHASE
+void online_CV_BP_algorithm( int epochs, int trainset_size, double n, double alpha, double s_min, double s_max, char * output_file){
+    int i, j, m, epoch;
+    double * y_pred;
+    double err, err_val;
+    int validationset_size = trainset_size*1/4;
+
     FILE * outFile;
-    struct stat st = {0};
-    if (stat("out/", &st) == -1) {
-        mkdir("out/", 0700);
-    }
     //opening the output file
-    outFile = fopen( "out/result.csv", "wb" );
-    double y, z; 
+    outFile = fopen( output_file, "wb" );
+
+    //For epoch = 1 To num epochs
+    for( epoch = 0; epoch < epochs; epoch++ ){
+        err =0; err_val=0;
+        //For pat = 1 To num training patterns
+        for( i = 0; i < trainset_size-validationset_size; i++ ){
+            //Choose a random pattern of the training set
+            m = rand()%(trainset_size-validationset_size);
+            nn.a[0] = dataset.x_values[m];
+            //Feed−forward propagation of pattern x μ to obtain the output o(x μ )
+            feed_forward_propagation();
+            //Back−propagate the error for this pattern
+            error_back_propagation( dataset.y_values[m] );
+            //Update the weights and thresholds
+            update_nn( n, alpha ); //n and alpha
+        }
+        //Feed−forward all training patterns and calculate their prediction quadratic error
+        //Feed−forward all training patterns and calculate the percentage of error for the predictions
+        for( i = 0; i < trainset_size-validationset_size; i++ ){
+            nn.a[0] = dataset.x_values[i];
+            y_pred = feed_forward_propagation();
+            for( j = 0; j < dataset.num_outputs; j++){
+                err += pow( (y_pred[j] - dataset.y_values[i][j]), 2);
+            }
+        }
+        err = err/2;
+        for( i = trainset_size-validationset_size; i < trainset_size; i++ ){
+            nn.a[0] = dataset.x_values[i];
+            y_pred = feed_forward_propagation();
+            for( j = 0; j < dataset.num_outputs; j++){
+                err_val += pow( (y_pred[j] - dataset.y_values[i][j]), 2);
+            }
+        }
+        err_val = err_val/2;
+        printf("Epoch: %d \tQuadratic error train set: %lf\tQuadratic error validation set: %lf\n", epoch, err, err_val );
+        fprintf(outFile, "%d, %lf, %lf\n", epoch, err, err_val );
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void reset_accum(){
+    int i, j, l;
+    l=0;
+    for( i=0; i < nn.neurons_for_hidden_layer[l] ;i++ ){
+        for( j=0; j < dataset.num_features; j++){
+            nn.accum_update_w[l][i][j] = 0;
+        }
+        nn.accum_update_theta[l][i] = 0;
+    }
+
+    for( l=1;  l < nn.hidden_layers; l++){
+        for( i=0; i < nn.neurons_for_hidden_layer[l]; i++ ){
+            for( j=0; j < nn.neurons_for_hidden_layer[l-1]; j++){
+                nn.accum_update_w[l][i][j] = 0;
+            }
+            nn.accum_update_theta[l][i] = 0;
+        }
+    }
+}
+
+void batched_error_back_propagation( double * y ){
+    int i, j, l;
+    double aux;
+    //computing the error of the output layer
+    l = nn.hidden_layers-1;
+    aux = 0;
+    for(i=0; i< nn.neurons_for_hidden_layer[l]; i++ ){
+        nn.d[l][i] = compute_derivate_a( nn.h[l+1][i] )*( nn.a[l+1][i] - y[i] );
+    }
+
+    //computing the error for the rest of the layers
+    for( l=nn.hidden_layers - 2; l>=0; l--){
+        for(j=0; j < nn.neurons_for_hidden_layer[l]; j++){
+            aux = 0;
+            for(i=0; i< nn.neurons_for_hidden_layer[l+1]; i++ ){
+                aux += nn.d[l+1][i] * nn.w[l+1][i][j];
+            }
+            nn.d[l][j] = compute_derivate_a( nn.h[l+1][j] )*aux; //ERROR found (using h0 which doesn't exists)
+        }
+    }
+
+    l=0;
+    for( i=0; i < nn.neurons_for_hidden_layer[l] ;i++ ){
+        for( j=0; j < dataset.num_features; j++){
+            nn.accum_update_w[l][i][j] += ( nn.d[l][i] * nn.a[l][j] );
+        }
+        nn.accum_update_theta[l][i] += nn.d[l][i];
+    }
+
+    for( l=1;  l < nn.hidden_layers; l++){
+        for( i=0; i < nn.neurons_for_hidden_layer[l]; i++ ){
+            for( j=0; j < nn.neurons_for_hidden_layer[l-1]; j++){
+                nn.accum_update_w[l][i][j] += ( nn.d[l][i] * nn.a[l][j] );
+            }
+            nn.accum_update_theta[l][i] += nn.d[l][i];
+        }
+    }
+}
+
+void batched_update_nn(double n, double alpha){
+    int l, i, j; 
+    //updating the weights and thresholds of the first hidden layer
+    l=0;
+    for( i=0; i < nn.neurons_for_hidden_layer[l] ;i++ ){
+        for( j=0; j < dataset.num_features; j++){
+            nn.update_w[l][i][j] = (-n * nn.accum_update_w[l][i][j] ) + ( alpha * nn.update_w[l][i][j] );
+            nn.w[l][i][j] = nn.w[l][i][j] + nn.update_w[l][i][j];
+        }
+        nn.update_theta[l][i] = (n * nn.accum_update_theta[l][i] ) + ( alpha * nn.update_theta[l][i] );
+        nn.theta[l][i] = nn.theta[l][i] + nn.update_theta[l][i];
+    }
+
+    //updating the weights and thresholds of intermediate hidden layers
+    for( l=1;  l < nn.hidden_layers; l++){
+        for( i=0; i < nn.neurons_for_hidden_layer[l]; i++ ){
+            for( j=0; j < nn.neurons_for_hidden_layer[l-1]; j++){
+                nn.update_w[l][i][j] = (-n * nn.accum_update_w[l][i][j] ) + ( alpha * nn.update_w[l][i][j] );
+                nn.w[l][i][j] = nn.w[l][i][j] + nn.update_w[l][i][j];
+            }
+            nn.update_theta[l][i] = (n * nn.accum_update_theta[l][i] ) + ( alpha * nn.update_theta[l][i] );
+            nn.theta[l][i] = nn.theta[l][i] + nn.update_theta[l][i];
+        }
+    }
+}
+
+void batched_BP_algorithm( int epochs, int trainset_size, double n, double alpha, double s_min, double s_max){
+    int i, j, m, epoch;
+    double * y_pred;
+    double err, aux1, aux2;
+    //For epoch = 1 To num epochs
+    for( epoch = 0; epoch < epochs; epoch++ ){
+        err =0; aux1=0; aux2=0;
+        reset_accum();
+        //For pat = 1 To num training patterns
+        for( i = 0; i < trainset_size; i++ ){
+            //Choose a random pattern of the training set
+            m = rand()%trainset_size;
+            nn.a[0] = dataset.x_values[m];
+            //Feed−forward propagation of pattern x μ to obtain the output o(x μ )
+            feed_forward_propagation();
+            //Back−propagate the error for this pattern
+            batched_error_back_propagation( dataset.y_values[m] );
+        }
+        //Update the weights and thresholds
+        batched_update_nn( n, alpha ); //n and alpha
+        //Feed−forward all training patterns and calculate their prediction quadratic error
+        //Feed−forward all training patterns and calculate the percentage of error for the predictions
+        for( i = 0; i < trainset_size; i++ ){
+            nn.a[0] = dataset.x_values[i];
+            y_pred = feed_forward_propagation();
+            for( j = 0; j < dataset.num_outputs; j++){
+                aux1 += fabs( descale_y_value( y_pred[j], j, s_min, s_max ) - descale_y_value( dataset.y_values[i][j], j, s_min, s_max ) );
+                aux2 += descale_y_value( dataset.y_values[i][j], j, s_min, s_max );
+                err += pow( (y_pred[j] - dataset.y_values[i][j]), 2);
+            }
+        }
+        err = err/2;
+        printf("Epoch: %d \tQuadratic error: %lf\tPercentage of error: %lf\n", epoch, err, (aux1/aux2*100) );
+        //Feed−forward all validation patterns and calculate their prediction quadratic error
+        //WE DON'T USE A VALIDATION SET IN THIS PRACTICE
+    }
+}
+
+void batched_CV_BP_algorithm( int epochs, int trainset_size, double n, double alpha, double s_min, double s_max, char * output_file){
+    int i, j, m, epoch;
+    double * y_pred;
+    double err, err_val;
+    int validationset_size = trainset_size*1/4;
+
+    FILE * outFile;
+    //opening the output file
+    outFile = fopen( output_file, "wb" );
+
+    //For epoch = 1 To num epochs
+    for( epoch = 0; epoch < epochs; epoch++ ){
+        err =0; err_val=0;
+        reset_accum();
+        //For pat = 1 To num training patterns
+        for( i = 0; i < trainset_size-validationset_size; i++ ){
+            //Choose a random pattern of the training set
+            m = rand()%(trainset_size-validationset_size);
+            nn.a[0] = dataset.x_values[m];
+            //Feed−forward propagation of pattern x μ to obtain the output o(x μ )
+            feed_forward_propagation();
+            //Back−propagate the error for this pattern
+            batched_error_back_propagation( dataset.y_values[m] );
+        }
+        //Update the weights and thresholds
+        batched_update_nn( n, alpha ); //n and alpha
+        //Feed−forward all training patterns and calculate their prediction quadratic error
+        //Feed−forward all training patterns and calculate the percentage of error for the predictions
+        for( i = 0; i < trainset_size-validationset_size; i++ ){
+            nn.a[0] = dataset.x_values[i];
+            y_pred = feed_forward_propagation();
+            for( j = 0; j < dataset.num_outputs; j++){
+                err += pow( (y_pred[j] - dataset.y_values[i][j]), 2);
+            }
+        }
+        err = err/2;
+        for( i = trainset_size-validationset_size; i < trainset_size; i++ ){
+            nn.a[0] = dataset.x_values[i];
+            y_pred = feed_forward_propagation();
+            for( j = 0; j < dataset.num_outputs; j++){
+                err_val += pow( (y_pred[j] - dataset.y_values[i][j]), 2);
+            }
+        }
+        err_val = err_val/2;
+        printf("Epoch: %d \tQuadratic error train set: %lf\tQuadratic error validation set: %lf\n", epoch, err, err_val );
+        fprintf(outFile, "%d, %lf, %lf\n", epoch, err, err_val );
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+double test_BP_algorithm( int trainset_size, double s_min, double s_max, char * output_file){
+    FILE * outFile;
+    double * y_pred, aux1, aux2, y, z;
+    int i, j;
+
+    //opening the output file
+    outFile = fopen( output_file, "wb" );
+    aux1 = 0; aux2 = 0;
     //Feed−forward all test patterns
     //Descale the predictions of test patterns, and evaluate them
     for( i = trainset_size; i < dataset.num_samples; i++ ){
@@ -428,6 +687,83 @@ int main(int argc, char *argv[])
     }
     printf("\nPercentage of error over the TestSet: %lf\n", (aux1/aux2*100) );
     fclose(outFile);
+    return( aux1/aux2*100 );
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+int main(int argc, char *argv[])
+{
+    srand ( time ( NULL));
+    if( argc < 4){
+        printf("Too few arguments.\n");
+        printf("%s\n", arguments);
+        exit(1);
+    }
+    double s_min = 0.1;
+    double s_max = 0.9;
+    int epochs = atoi(argv[2]); //number of epochs
+    float trainset_size_perc = atof(argv[3]); //% of the dataset used as the training set 
+    double n = atof(argv[4]); //learning rate: between 0.2 and 0.01
+    double alpha = atof(argv[5]); //momentum: between 0.0 and 0.9
+
+    //genrating the dataset
+    init_dataset( argv[1] );
+    //print_dataset();
+
+    //preprocessing de data
+    scale_dataset( s_min, s_max );
+    //print_dataset();
+    
+    //initializing the neural network
+    nn.hidden_layers = atoi(argv[6]);
+    if( argc < 6 + nn.hidden_layers ){
+        printf("Too few arguments.\n");
+        printf("%s\n", arguments);
+        exit(1);
+    }
+    nn.neurons_for_hidden_layer = (int *) malloc( sizeof(int) * nn.hidden_layers );
+    for( int i = 0; i < nn.hidden_layers; i++ )
+        nn.neurons_for_hidden_layer[i] = atoi( argv[6+i] );
+    init_nn();
+
+    struct stat st = {0};
+    if (stat("out/", &st) == -1) {
+        mkdir("out/", 0700);
+    }
+    char * on_cv = "out/online_CV_result.csv";
+    char * on_test = "out/online_test_result.csv";
+    char * batch_cv = "out/batch_CV_result.csv";
+    char * batch_test = "out/batch_test_result.csv";
+    double result_online, result_batch;
+
+    //ONLINE BP ALGORITHM
+    ////////////////////////////////////
+
+    //TRAINING PHASE
+    int trainset_size = FLOAT_TO_INT( dataset.num_samples * trainset_size_perc / 100 );
+    online_CV_BP_algorithm( epochs, trainset_size, n, alpha, s_min, s_max, on_cv);
+
+    reset_nn();
+    //TRAINING PHASE
+    online_BP_algorithm( epochs, trainset_size, n, alpha, s_min, s_max);
+    //TESTING PHASE
+    result_online = test_BP_algorithm( trainset_size, s_min, s_max, on_test);
+
+    //PARTIAL BATCHED BP ALGORITHM
+    ////////////////////////////////////
+
+    reset_nn();
+    //TRAINING PHASE
+    batched_CV_BP_algorithm( epochs, trainset_size, n, alpha, s_min, s_max, batch_cv);
+
+    reset_nn();
+    //TRAINING PHASE
+    batched_BP_algorithm( epochs, trainset_size, n, alpha, s_min, s_max);
+    //TESTING PHASE
+    result_batch = test_BP_algorithm( trainset_size, s_min, s_max, batch_test);
+
+    printf("\nResult using the online BP algorithm: %lf \nResult using the batched BP algorithm: %lf\n", result_online, result_batch);
     
     exit( 0 );
 }

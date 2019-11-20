@@ -43,6 +43,6 @@ The first line of the dataset file must contain the number of samples (lines) co
 
 The number of outputs indicated in the data file has to be the same than the number of neurons of the last hidden (output) layer specified as an input.
 
-## Authors
+## Author
 
 * **Cristòfol Daudén Esmel** - [toful](https://github.com/toful)
