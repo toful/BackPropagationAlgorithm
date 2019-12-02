@@ -22,10 +22,8 @@ clean :
 
 
 run : clean all
-		./$(BIN) "dataset/data.txt" 20000 89 0.05 0.01 3 9 5 1
+		#./$(BIN) "data/ring_separable.txt" "data/ring_test.txt" 1500 100 0.1 0.5 3 15 10 1
+		./$(BIN) "dataset/ring_separable.txt" "data/ring_test.txt" 1000 100 0.1 0.5 4 20 10 5 1
 
-test : clean all
-		./$(BIN) "dataset/data_test.txt" 1000 80 0.05 0.25 2 5 1
-
-#./$(BIN) "dataset/data.txt" 15000 89 0.05 0.25 4 9 5 5 1
-#./backPropagation.obj "dataset/data.txt" 20000 89 0.02 0.1 6 4 8 10 10 8 1
+run2 : clean all
+		./$(BIN) "dataset/ring_merged.txt" "data/ring_test.txt" 1500 100 0.1 0.5 4 20 10 5 1

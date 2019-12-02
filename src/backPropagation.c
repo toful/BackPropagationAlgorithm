@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <string.h>
 
 #define FLOAT_TO_INT(x) ((x)>=0?(int)((x)+0.5):(int)((x)-0.5))
 
@@ -38,13 +39,15 @@ typedef struct {
     double ** accum_update_theta; //update theta values for the batch bp
 } neuralNetwork_struct;
 
-dataset_struct dataset; //dataset storing structure
+dataset_struct train_dataset; //train dataset storing structure
+dataset_struct test_dataset; //test dataset storing structure
 neuralNetwork_struct nn; //neural network structure
 
-char * arguments = "The following input values are needed:\n\tData file\n\tNumber of epochs\n\t\% of the dataset used as the training set\n\tLearning rate(n)\n\tMomentum (alpha)\n\tNumber of hidden layers (including the output layer)\n\t[neurons for each layer]";
+char * arguments = "The following input values are needed:\n\tTraining Dataset file\n\tTest Dataset file\n\tNumber of epochs\n\0t\% of the dataset used as the training set\n\tLearning rate(n)\n\tMomentum (alpha)\n\tNumber of hidden layers (including the output layer)\n\t[neurons for each layer]";
 
 
-void print_dataset(){
+
+void print_dataset( dataset_struct dataset ){
     for(int m=0; m<dataset.num_samples; m++){
         for(int n=0; n<dataset.num_features; n++)
             printf("%lf\t", dataset.x_values[m][n]);
@@ -54,9 +57,10 @@ void print_dataset(){
     }
 }
 
-void load_file( FILE * myFile, int num_samples, int num_features, int num_outputs ){
+void load_file( FILE * myFile, dataset_struct * dataset, int num_samples, int num_features, int num_outputs ){
     int m, n, k;
     double ** tmp = ( double ** ) malloc( sizeof( double * ) * num_samples );
+
     for( m = 0; m < num_samples; m++ ){
         tmp[m] = ( double * ) malloc( sizeof( double ) * (num_features + num_outputs) );
     }
@@ -73,10 +77,10 @@ void load_file( FILE * myFile, int num_samples, int num_features, int num_output
 
     for( m=0; m < num_samples; m++){
         for( n=0; n<num_features; n++){
-            dataset.x_values[m][n] = tmp[m][n];
+            dataset->x_values[m][n] = tmp[m][n];
         }
         for( k=0; k< num_outputs; k++){
-            dataset.y_values[m][k] = tmp[m][num_features+k];
+            dataset->y_values[m][k] = tmp[m][num_features+k];
         }
         free( tmp[m] );
     }
@@ -84,7 +88,7 @@ void load_file( FILE * myFile, int num_samples, int num_features, int num_output
     printf("Dataset loaded\n");
 }
 
-void init_dataset( char * input_file ){
+void init_dataset( char * input_file, dataset_struct * dataset ){
     FILE *myFile;
     int num_samples, num_features, num_outputs;
     //opening the input file
@@ -100,90 +104,27 @@ void init_dataset( char * input_file ){
         printf("ERROR: file %s is not in the proper format\n", input_file );
         exit(1);
     }
-    dataset.num_samples = num_samples;
-    dataset.num_features = num_features;
-    dataset.num_outputs = num_outputs;
+    dataset->num_samples = num_samples;
+    dataset->num_features = num_features;
+    dataset->num_outputs = num_outputs;
 
-    dataset.x_values = ( double ** ) malloc( sizeof( double * ) * num_samples );
+    dataset->x_values = ( double ** ) malloc( sizeof( double * ) * num_samples );
     for( int i = 0; i < num_samples; i++ )
-        dataset.x_values[i] = ( double * ) malloc( sizeof( double ) * num_features );
+        dataset->x_values[i] = ( double * ) malloc( sizeof( double ) * num_features );
 
-    dataset.y_values = ( double ** ) malloc( sizeof( double * ) * num_samples );
+    dataset->y_values = ( double ** ) malloc( sizeof( double * ) * num_samples );
     for( int i = 0; i < num_samples; i++ )
-        dataset.y_values[i] = ( double *) malloc( sizeof( double ) * num_outputs );
+        dataset->y_values[i] = ( double *) malloc( sizeof( double ) * num_outputs );
 
-    dataset.x_min_values = ( double * ) malloc( sizeof( double ) * num_features );
-    dataset.x_max_values = ( double * ) malloc( sizeof( double ) * num_features );
-    dataset.y_min_values = ( double * ) malloc( sizeof( double ) * num_outputs );
-    dataset.y_max_values = ( double * ) malloc( sizeof( double ) * num_outputs );
+    dataset->x_min_values = ( double * ) malloc( sizeof( double ) * num_features );
+    dataset->x_max_values = ( double * ) malloc( sizeof( double ) * num_features );
+    dataset->y_min_values = ( double * ) malloc( sizeof( double ) * num_outputs );
+    dataset->y_max_values = ( double * ) malloc( sizeof( double ) * num_outputs );
     printf("Start Reading data from %s\n", input_file );
-    load_file( myFile, num_samples, num_features, num_outputs);
-    //print_dataset();
+    load_file( myFile, dataset, num_samples, num_features, num_outputs);
 }
 
-void scale_dataset( double s_min, double s_max ){
-    printf("Scaling the dataset to range [%f, %f]\n", s_min, s_max);
-    double max, min;
-    for( int n=0; n < dataset.num_features; n++){
-        max = LONG_MIN;
-        min = LONG_MAX;
-        for( int m=0; m < dataset.num_samples; m++){
-            if( dataset.x_values[m][n] > max ) max = dataset.x_values[m][n];
-            if( dataset.x_values[m][n] < min ) min = dataset.x_values[m][n];
-        }
-        dataset.x_min_values[n] = min;
-        dataset.x_max_values[n] = max;
-        for( int m=0; m < dataset.num_samples; m++)
-            dataset.x_values[m][n] = s_min + (s_max - s_min)/(max - min)*(dataset.x_values[m][n] - min);
-    }
-    for( int n=0; n < dataset.num_outputs; n++){
-        max = LONG_MIN;
-        min = LONG_MAX;
-        for( int m=0; m < dataset.num_samples; m++){
-            if( dataset.y_values[m][n] > max ) max = dataset.y_values[m][n];
-            if( dataset.y_values[m][n] < min ) min = dataset.y_values[m][n];
-        }
-        dataset.y_min_values[n] = min;
-        dataset.y_max_values[n] = max;
-        for( int m=0; m < dataset.num_samples; m++)
-            dataset.y_values[m][n] = s_min + (s_max - s_min)/(max - min)*(dataset.y_values[m][n] - min);
-    }
-    //print_dataset();
-}
-
-void descale_dataset( double s_min, double s_max ){
-    printf("Descaling the dataset from range [%f, %f]\n", s_min, s_max);
-    double max, min;
-    for( int n=0; n < dataset.num_features; n++){
-        min = dataset.x_min_values[n];
-        max = dataset.x_max_values[n];
-        for( int m=0; m < dataset.num_samples; m++)
-            dataset.x_values[m][n] = min + (max - min)/(s_max - s_min)*(dataset.x_values[m][n] - s_min);
-    }
-    for( int n=0; n < dataset.num_outputs; n++){
-        min = dataset.y_min_values[n];
-        max = dataset.y_max_values[n];
-        for( int m=0; m < dataset.num_samples; m++)
-            dataset.y_values[m][n] = min + (max - min)/(s_max - s_min)*(dataset.y_values[m][n] - s_min);
-    }
-    //print_dataset();
-}
-
-double descale_x_value( double value, int feature, double s_min, double s_max ){
-    double x_max, x_min;
-    x_min = dataset.x_min_values[ feature ];
-    x_max = dataset.x_max_values[ feature ];
-    return ( x_min + (x_max - x_min)/(s_max - s_min)*(value - s_min) );
-}
-
-double descale_y_value( double value, int feature, double s_min, double s_max ){
-    double y_max, y_min;
-    y_min = dataset.y_min_values[feature];
-    y_max = dataset.y_max_values[feature];
-    return ( y_min + (y_max - y_min)/(s_max - s_min)*(value - s_min) );
-}
-
-void init_nn(){
+void init_nn( dataset_struct dataset ){
     int l, i, j;
     //INITIALIZING THE WEIGHTS
     nn.w = (double ***) malloc( sizeof(double **) * (nn.hidden_layers + 1) ); //num hidden layers +1 because of the output layer
@@ -273,7 +214,7 @@ void init_nn(){
     }
 }
 
-void reset_nn(){
+void reset_nn( dataset_struct dataset ){
     int l, i, j;
     //INITIALIZING THE WEIGHTS
     //initializing the weigths between the input layer and the first hidden layer
@@ -318,14 +259,14 @@ void reset_nn(){
     }
 }
 
-double * feed_forward_propagation(){
+double * feed_forward_propagation( ){
     double aux;
     int i, j, l;
     //computing the activation values of the first hidden layer
     l=0;
     for( i=0; i < nn.neurons_for_hidden_layer[l] ;i++ ){
         aux = 0;
-        for( j=0; j < dataset.num_features; j++)
+        for( j=0; j < train_dataset.num_features; j++)
             aux += nn.w[l][i][j] * nn.a[l][j];
         nn.h[l+1][i] = aux - nn.theta[l][i];  //=h(l)i
         nn.a[l+1][i] = 1 / ( 1 + exp(- nn.h[l+1][i] ) ); //g(h)
@@ -375,12 +316,12 @@ void error_back_propagation( double * y ){
     }
 }
 
-void update_nn(double n, double alpha){
+void update_nn( double n, double alpha){
     int l, i, j; 
     //updating the weights and thresholds of the first hidden layer
     l=0;
     for( i=0; i < nn.neurons_for_hidden_layer[l] ;i++ ){
-        for( j=0; j < dataset.num_features; j++){
+        for( j=0; j < train_dataset.num_features; j++){
             nn.update_w[l][i][j] = (-n * nn.d[l][i] * nn.a[l][j] ) + ( alpha * nn.update_w[l][i][j] );
             nn.w[l][i][j] = nn.w[l][i][j] + nn.update_w[l][i][j];
         }
@@ -404,259 +345,43 @@ void update_nn(double n, double alpha){
 void online_BP_algorithm( int epochs, int trainset_size, double n, double alpha, double s_min, double s_max){
     int i, j, m, epoch;
     double * y_pred;
-    double err, aux1, aux2;
+    double err, class_err;
+    int tp, tn, fp, fn;
     //For epoch = 1 To num epochs
     for( epoch = 0; epoch < epochs; epoch++ ){
-        err =0; aux1=0; aux2=0;
+        err =0;
+        tp=0; tn=0; fp=0; fn=0;
         //For pat = 1 To num training patterns
         for( i = 0; i < trainset_size; i++ ){
             //Choose a random pattern of the training set
             m = rand()%trainset_size;
-            nn.a[0] = dataset.x_values[m];
+            nn.a[0] = train_dataset.x_values[m];
             //Feed−forward propagation of pattern x μ to obtain the output o(x μ )
             feed_forward_propagation();
             //Back−propagate the error for this pattern
-            error_back_propagation( dataset.y_values[m] );
+            error_back_propagation( train_dataset.y_values[m] );
             //Update the weights and thresholds
             update_nn( n, alpha ); //n and alpha
         }
-        //Feed−forward all training patterns and calculate their prediction quadratic error
-        //Feed−forward all training patterns and calculate the percentage of error for the predictions
-        for( i = 0; i < trainset_size; i++ ){
-            nn.a[0] = dataset.x_values[i];
+        for( i = 0; i < train_dataset.num_samples; i++ ){
+            nn.a[0] = train_dataset.x_values[i];
             y_pred = feed_forward_propagation();
-            for( j = 0; j < dataset.num_outputs; j++){
-                aux1 += fabs( descale_y_value( y_pred[j], j, s_min, s_max ) - descale_y_value( dataset.y_values[i][j], j, s_min, s_max ) );
-                aux2 += descale_y_value( dataset.y_values[i][j], j, s_min, s_max );
-                err += pow( (y_pred[j] - dataset.y_values[i][j]), 2);
+            for( j = 0; j < train_dataset.num_outputs; j++){
+                if( y_pred[j] < 0.5 ){
+                    if( train_dataset.y_values[i][j] == 0 ) tn++;
+                    else fn++;
+                }
+                else{
+                    if( train_dataset.y_values[i][j] == 1 ) tp++;
+                    else fp++;
+                }
+                err += pow( (y_pred[j] - train_dataset.y_values[i][j]), 2);
             }
         }
         err = err/2;
-        printf("Epoch: %d \tQuadratic error: %lf\tPercentage of error: %lf\n", epoch, err, (aux1/aux2*100) );
-        //Feed−forward all validation patterns and calculate their prediction quadratic error
-        //WE DON'T USE A VALIDATION SET IN THIS PRACTICE
-    }
-}
-
-void online_CV_BP_algorithm( int epochs, int trainset_size, double n, double alpha, double s_min, double s_max, char * output_file){
-    int i, j, m, epoch;
-    double * y_pred;
-    double err, err_val;
-    int validationset_size = trainset_size*1/4;
-
-    FILE * outFile;
-    //opening the output file
-    outFile = fopen( output_file, "wb" );
-
-    //For epoch = 1 To num epochs
-    for( epoch = 0; epoch < epochs; epoch++ ){
-        err =0; err_val=0;
-        //For pat = 1 To num training patterns
-        for( i = 0; i < trainset_size-validationset_size; i++ ){
-            //Choose a random pattern of the training set
-            m = rand()%(trainset_size-validationset_size);
-            nn.a[0] = dataset.x_values[m];
-            //Feed−forward propagation of pattern x μ to obtain the output o(x μ )
-            feed_forward_propagation();
-            //Back−propagate the error for this pattern
-            error_back_propagation( dataset.y_values[m] );
-            //Update the weights and thresholds
-            update_nn( n, alpha ); //n and alpha
-        }
-        //Feed−forward all training patterns and calculate their prediction quadratic error
-        //Feed−forward all training patterns and calculate the percentage of error for the predictions
-        for( i = 0; i < trainset_size-validationset_size; i++ ){
-            nn.a[0] = dataset.x_values[i];
-            y_pred = feed_forward_propagation();
-            for( j = 0; j < dataset.num_outputs; j++){
-                err += pow( (y_pred[j] - dataset.y_values[i][j]), 2);
-            }
-        }
-        err = err/2;
-        for( i = trainset_size-validationset_size; i < trainset_size; i++ ){
-            nn.a[0] = dataset.x_values[i];
-            y_pred = feed_forward_propagation();
-            for( j = 0; j < dataset.num_outputs; j++){
-                err_val += pow( (y_pred[j] - dataset.y_values[i][j]), 2);
-            }
-        }
-        err_val = err_val/2;
-        printf("Epoch: %d \tQuadratic error train set: %lf\tQuadratic error validation set: %lf\n", epoch, err, err_val );
-        fprintf(outFile, "%d, %lf, %lf\n", epoch, err, err_val );
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void reset_accum(){
-    int i, j, l;
-    l=0;
-    for( i=0; i < nn.neurons_for_hidden_layer[l] ;i++ ){
-        for( j=0; j < dataset.num_features; j++){
-            nn.accum_update_w[l][i][j] = 0;
-        }
-        nn.accum_update_theta[l][i] = 0;
-    }
-
-    for( l=1;  l < nn.hidden_layers; l++){
-        for( i=0; i < nn.neurons_for_hidden_layer[l]; i++ ){
-            for( j=0; j < nn.neurons_for_hidden_layer[l-1]; j++){
-                nn.accum_update_w[l][i][j] = 0;
-            }
-            nn.accum_update_theta[l][i] = 0;
-        }
-    }
-}
-
-void batched_error_back_propagation( double * y ){
-    int i, j, l;
-    double aux;
-    //computing the error of the output layer
-    l = nn.hidden_layers-1;
-    aux = 0;
-    for(i=0; i< nn.neurons_for_hidden_layer[l]; i++ ){
-        nn.d[l][i] = compute_derivate_a( nn.h[l+1][i] )*( nn.a[l+1][i] - y[i] );
-    }
-
-    //computing the error for the rest of the layers
-    for( l=nn.hidden_layers - 2; l>=0; l--){
-        for(j=0; j < nn.neurons_for_hidden_layer[l]; j++){
-            aux = 0;
-            for(i=0; i< nn.neurons_for_hidden_layer[l+1]; i++ ){
-                aux += nn.d[l+1][i] * nn.w[l+1][i][j];
-            }
-            nn.d[l][j] = compute_derivate_a( nn.h[l+1][j] )*aux; //ERROR found (using h0 which doesn't exists)
-        }
-    }
-
-    l=0;
-    for( i=0; i < nn.neurons_for_hidden_layer[l] ;i++ ){
-        for( j=0; j < dataset.num_features; j++){
-            nn.accum_update_w[l][i][j] += ( nn.d[l][i] * nn.a[l][j] );
-        }
-        nn.accum_update_theta[l][i] += nn.d[l][i];
-    }
-
-    for( l=1;  l < nn.hidden_layers; l++){
-        for( i=0; i < nn.neurons_for_hidden_layer[l]; i++ ){
-            for( j=0; j < nn.neurons_for_hidden_layer[l-1]; j++){
-                nn.accum_update_w[l][i][j] += ( nn.d[l][i] * nn.a[l][j] );
-            }
-            nn.accum_update_theta[l][i] += nn.d[l][i];
-        }
-    }
-}
-
-void batched_update_nn(double n, double alpha){
-    int l, i, j; 
-    //updating the weights and thresholds of the first hidden layer
-    l=0;
-    for( i=0; i < nn.neurons_for_hidden_layer[l] ;i++ ){
-        for( j=0; j < dataset.num_features; j++){
-            nn.update_w[l][i][j] = (-n * nn.accum_update_w[l][i][j] ) + ( alpha * nn.update_w[l][i][j] );
-            nn.w[l][i][j] = nn.w[l][i][j] + nn.update_w[l][i][j];
-        }
-        nn.update_theta[l][i] = (n * nn.accum_update_theta[l][i] ) + ( alpha * nn.update_theta[l][i] );
-        nn.theta[l][i] = nn.theta[l][i] + nn.update_theta[l][i];
-    }
-
-    //updating the weights and thresholds of intermediate hidden layers
-    for( l=1;  l < nn.hidden_layers; l++){
-        for( i=0; i < nn.neurons_for_hidden_layer[l]; i++ ){
-            for( j=0; j < nn.neurons_for_hidden_layer[l-1]; j++){
-                nn.update_w[l][i][j] = (-n * nn.accum_update_w[l][i][j] ) + ( alpha * nn.update_w[l][i][j] );
-                nn.w[l][i][j] = nn.w[l][i][j] + nn.update_w[l][i][j];
-            }
-            nn.update_theta[l][i] = (n * nn.accum_update_theta[l][i] ) + ( alpha * nn.update_theta[l][i] );
-            nn.theta[l][i] = nn.theta[l][i] + nn.update_theta[l][i];
-        }
-    }
-}
-
-void batched_BP_algorithm( int epochs, int trainset_size, double n, double alpha, double s_min, double s_max){
-    int i, j, m, epoch;
-    double * y_pred;
-    double err, aux1, aux2;
-    //For epoch = 1 To num epochs
-    for( epoch = 0; epoch < epochs; epoch++ ){
-        err =0; aux1=0; aux2=0;
-        reset_accum();
-        //For pat = 1 To num training patterns
-        for( i = 0; i < trainset_size; i++ ){
-            //Choose a random pattern of the training set
-            m = rand()%trainset_size;
-            nn.a[0] = dataset.x_values[m];
-            //Feed−forward propagation of pattern x μ to obtain the output o(x μ )
-            feed_forward_propagation();
-            //Back−propagate the error for this pattern
-            batched_error_back_propagation( dataset.y_values[m] );
-        }
-        //Update the weights and thresholds
-        batched_update_nn( n, alpha ); //n and alpha
-        //Feed−forward all training patterns and calculate their prediction quadratic error
-        //Feed−forward all training patterns and calculate the percentage of error for the predictions
-        for( i = 0; i < trainset_size; i++ ){
-            nn.a[0] = dataset.x_values[i];
-            y_pred = feed_forward_propagation();
-            for( j = 0; j < dataset.num_outputs; j++){
-                aux1 += fabs( descale_y_value( y_pred[j], j, s_min, s_max ) - descale_y_value( dataset.y_values[i][j], j, s_min, s_max ) );
-                aux2 += descale_y_value( dataset.y_values[i][j], j, s_min, s_max );
-                err += pow( (y_pred[j] - dataset.y_values[i][j]), 2);
-            }
-        }
-        err = err/2;
-        printf("Epoch: %d \tQuadratic error: %lf\tPercentage of error: %lf\n", epoch, err, (aux1/aux2*100) );
-        //Feed−forward all validation patterns and calculate their prediction quadratic error
-        //WE DON'T USE A VALIDATION SET IN THIS PRACTICE
-    }
-}
-
-void batched_CV_BP_algorithm( int epochs, int trainset_size, double n, double alpha, double s_min, double s_max, char * output_file){
-    int i, j, m, epoch;
-    double * y_pred;
-    double err, err_val;
-    int validationset_size = trainset_size*1/4;
-
-    FILE * outFile;
-    //opening the output file
-    outFile = fopen( output_file, "wb" );
-
-    //For epoch = 1 To num epochs
-    for( epoch = 0; epoch < epochs; epoch++ ){
-        err =0; err_val=0;
-        reset_accum();
-        //For pat = 1 To num training patterns
-        for( i = 0; i < trainset_size-validationset_size; i++ ){
-            //Choose a random pattern of the training set
-            m = rand()%(trainset_size-validationset_size);
-            nn.a[0] = dataset.x_values[m];
-            //Feed−forward propagation of pattern x μ to obtain the output o(x μ )
-            feed_forward_propagation();
-            //Back−propagate the error for this pattern
-            batched_error_back_propagation( dataset.y_values[m] );
-        }
-        //Update the weights and thresholds
-        batched_update_nn( n, alpha ); //n and alpha
-        //Feed−forward all training patterns and calculate their prediction quadratic error
-        //Feed−forward all training patterns and calculate the percentage of error for the predictions
-        for( i = 0; i < trainset_size-validationset_size; i++ ){
-            nn.a[0] = dataset.x_values[i];
-            y_pred = feed_forward_propagation();
-            for( j = 0; j < dataset.num_outputs; j++){
-                err += pow( (y_pred[j] - dataset.y_values[i][j]), 2);
-            }
-        }
-        err = err/2;
-        for( i = trainset_size-validationset_size; i < trainset_size; i++ ){
-            nn.a[0] = dataset.x_values[i];
-            y_pred = feed_forward_propagation();
-            for( j = 0; j < dataset.num_outputs; j++){
-                err_val += pow( (y_pred[j] - dataset.y_values[i][j]), 2);
-            }
-        }
-        err_val = err_val/2;
-        printf("Epoch: %d \tQuadratic error train set: %lf\tQuadratic error validation set: %lf\n", epoch, err, err_val );
-        fprintf(outFile, "%d, %lf, %lf\n", epoch, err, err_val );
+        class_err = (float)(fp + fn) / (float)(tp + tn + fp + fn );
+        //printf("\nConfusion Matrix\n%d\t%d\n%d\t%d\n", tp, fp, fn, tn);
+        printf("Epoch: %d \tQuadratic error: %lf\tClassification error: %lf\n", epoch, err, class_err );
     }
 }
 
@@ -664,30 +389,37 @@ void batched_CV_BP_algorithm( int epochs, int trainset_size, double n, double al
 
 double test_BP_algorithm( int trainset_size, double s_min, double s_max, char * output_file){
     FILE * outFile;
-    double * y_pred, aux1, aux2, y, z;
+    double * y_pred, y, class_err;
     int i, j;
+    int tp=0, tn=0, fp=0, fn=0;
 
     //opening the output file
     outFile = fopen( output_file, "wb" );
-    aux1 = 0; aux2 = 0;
     //Feed−forward all test patterns
-    //Descale the predictions of test patterns, and evaluate them
-    for( i = trainset_size; i < dataset.num_samples; i++ ){
-        nn.a[0] = dataset.x_values[i];
+    for( i = 0; i < test_dataset.num_samples; i++ ){
+        nn.a[0] = test_dataset.x_values[i];
         y_pred = feed_forward_propagation();
-        y=0; z=0;
-        for( j = 0; j < dataset.num_outputs; j++){
-            y += descale_y_value( y_pred[j], j, s_min, s_max );
-            z += descale_y_value( dataset.y_values[i][j], j, s_min, s_max );
+        y=0;
+        for( j = 0; j < train_dataset.num_outputs; j++){
+            if( y_pred[j] < 0.5 ){
+                y = 0;
+                if( test_dataset.y_values[i][j] == 0 ) tn++;
+                else fn++;
+            }
+            else{
+                y = 1;
+                if( test_dataset.y_values[i][j] == 1 ) tp++;
+                else fp++;
+            }
         }
-        printf("%lf, %lf, %lf\n", z, y, fabs(z - y) );
-        fprintf(outFile, "%lf, %lf, %lf\n", z, y, fabs(z - y) );
-        aux1 += fabs(z - y);
-        aux2 += z;
+        //printf("%lf, %lf\n", test_dataset.y_values[i][0], y );
+        fprintf(outFile, "%lf, %lf, %lf, %lf\n", test_dataset.y_values[i][0], y, test_dataset.x_values[i][0], test_dataset.x_values[i][1] );
     }
-    printf("\nPercentage of error over the TestSet: %lf\n", (aux1/aux2*100) );
-    fclose(outFile);
-    return( aux1/aux2*100 );
+    class_err = (float)(fp + fn) / (float)(tp + tn + fp + fn );
+    printf("\nConfusion Matrix\n%d\t%d\n%d\t%d\n", tp, fp, fn, tn);
+    printf("\nClassification error over the TestSet: %lf\n", class_err );
+    fclose( outFile );
+    return( class_err );
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -695,75 +427,57 @@ double test_BP_algorithm( int trainset_size, double s_min, double s_max, char * 
 int main(int argc, char *argv[])
 {
     srand ( time ( NULL));
-    if( argc < 4){
+    if( argc < 5){
         printf("Too few arguments.\n");
         printf("%s\n", arguments);
         exit(1);
     }
     double s_min = 0.1;
     double s_max = 0.9;
-    int epochs = atoi(argv[2]); //number of epochs
-    float trainset_size_perc = atof(argv[3]); //% of the dataset used as the training set 
-    double n = atof(argv[4]); //learning rate: between 0.2 and 0.01
-    double alpha = atof(argv[5]); //momentum: between 0.0 and 0.9
+    int epochs = atoi(argv[3]); //number of epochs
+    float trainset_size_perc = atof(argv[4]); //% of the dataset used as the training set 
+    double n = atof(argv[5]); //learning rate: between 0.2 and 0.01
+    double alpha = atof(argv[6]); //momentum: between 0.9 and 0.0
 
     //genrating the dataset
-    init_dataset( argv[1] );
-    //print_dataset();
-
-    //preprocessing de data
-    scale_dataset( s_min, s_max );
-    //print_dataset();
+    init_dataset( argv[1], & train_dataset );
+    //print_dataset( train_dataset );
+    init_dataset( argv[2], &test_dataset );
+    //print_dataset( test_dataset );
     
     //initializing the neural network
-    nn.hidden_layers = atoi(argv[6]);
-    if( argc < 6 + nn.hidden_layers ){
+    nn.hidden_layers = atoi(argv[7]);
+    if( argc < 7 + nn.hidden_layers ){
         printf("Too few arguments.\n");
         printf("%s\n", arguments);
         exit(1);
     }
     nn.neurons_for_hidden_layer = (int *) malloc( sizeof(int) * nn.hidden_layers );
     for( int i = 0; i < nn.hidden_layers; i++ )
-        nn.neurons_for_hidden_layer[i] = atoi( argv[6+i] );
-    init_nn();
+        nn.neurons_for_hidden_layer[i] = atoi( argv[7+i] );
+    init_nn( train_dataset );
 
     struct stat st = {0};
     if (stat("out/", &st) == -1) {
         mkdir("out/", 0700);
     }
-    char * on_cv = "out/online_CV_result.csv";
-    char * on_test = "out/online_test_result.csv";
-    char * batch_cv = "out/batch_CV_result.csv";
-    char * batch_test = "out/batch_test_result.csv";
-    double result_online, result_batch;
+
+    char on_test[200] = "out/online_";
+    strcat( on_test, &argv[1][10]);
+    strcat( on_test, ".csv");
+
 
     //ONLINE BP ALGORITHM
-    ////////////////////////////////////
+    //////////////////////////////////////////////////////////////////
 
     //TRAINING PHASE
-    int trainset_size = FLOAT_TO_INT( dataset.num_samples * trainset_size_perc / 100 );
-    online_CV_BP_algorithm( epochs, trainset_size, n, alpha, s_min, s_max, on_cv);
-
-    reset_nn();
+    int trainset_size = FLOAT_TO_INT( train_dataset.num_samples * trainset_size_perc / 100 );
+    //reset_nn();
     //TRAINING PHASE
     online_BP_algorithm( epochs, trainset_size, n, alpha, s_min, s_max);
     //TESTING PHASE
-    result_online = test_BP_algorithm( trainset_size, s_min, s_max, on_test);
+    test_BP_algorithm( trainset_size, s_min, s_max, on_test);
 
-    //PARTIAL BATCHED BP ALGORITHM
-    ////////////////////////////////////
-
-    reset_nn();
-    //TRAINING PHASE
-    batched_CV_BP_algorithm( epochs, trainset_size, n, alpha, s_min, s_max, batch_cv);
-
-    reset_nn();
-    //TRAINING PHASE
-    batched_BP_algorithm( epochs, trainset_size, n, alpha, s_min, s_max);
-    //TESTING PHASE
-    result_batch = test_BP_algorithm( trainset_size, s_min, s_max, batch_test);
-
-    printf("\nResult using the online BP algorithm: %lf \nResult using the batched BP algorithm: %lf\n", result_online, result_batch);
-    
+ 
     exit( 0 );
 }
